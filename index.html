@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pebble Dash – Growing Land & Skill Fix</title>
+  <style>
+    html, body { margin:0; padding:0; overflow:hidden; background:#87ceeb; }
+    canvas { display:block; }
+    #hud {
+      position:absolute; top:20px; left:20px;
+      background:rgba(0,0,0,0.5); color:white;
+      padding:10px 20px; font-size:18px; border-radius:10px; z-index:10;
+      font-family:sans-serif;
+    }
+    #powerBarContainer { position:absolute; bottom:80px; left:50%; transform:translateX(-50%); width:300px; height:20px; background:#ccc; border-radius:10px; overflow:hidden; z-index:9; }
+    #powerBar { height:100%; width:0; background:limegreen; transition:none; }
+    button { position:absolute; left:50%; transform:translateX(-50%); padding:12px 24px; font-size:16px; color:white; border:none; border-radius:8px; font-family:sans-serif; cursor:pointer; z-index:10; }
+    #powerBtn { bottom:30px; background:#004488; }
+    #skillBtn { bottom:30px; background:orange; display:none; transition: box-shadow 0.2s ease, transform 0.1s ease, opacity 0.2s ease; }
+    #skillBtn.skill-inactive { background:#666 !important; opacity:.6; cursor:not-allowed; box-shadow:none; }
+    #skillBtn.skill-active { background:orange !important; opacity:1; cursor:pointer; box-shadow:0 0 14px 4px rgba(255,165,0,0.8); }
+    #title { position:absolute; top:20px; width:100%; text-align:center; font-size:64px; font-weight:bold; color:white; text-shadow:2px 2px 8px black; z-index:20; font-family:sans-serif; animation:fadeTitle 2s ease-in-out infinite alternate; }
+    @keyframes fadeTitle { from { opacity:.4; transform:scale(1);} to { opacity:1; transform:scale(1.05);} }
+    #resetBtn { margin-top:8px; padding:6px 10px; font-size:12px; background:#aa3333; border:none; color:white; border-radius:6px; cursor:pointer; }
+    /* Leaderboard */
+    #leaderboard { position:absolute; top:120px; left:20px; right:auto; width:150px; background:rgba(0,0,0,0.50); color:#fff; border-radius:10px; padding:10px 12px; z-index:10; font-family:sans-serif; box-shadow:0 4px 14px rgba(0,0,0,.25); }
+    #leaderboard .board-title { text-align:center; font-weight:bold; margin-bottom:8px; color:white; font-size:18px; letter-spacing:1px; text-shadow:1px 1px 4px rgba(0,0,0,.9); }
+    #boardList { list-style:none; margin:0; padding:0; }
+    #boardList li { display:flex; align-items:center; justify-content:space-between; font-size:15px; padding:3px 0; color:white; font-weight:bold; text-shadow:1px 1px 4px rgba(0,0,0,.9); }
+    #boardList .cup { width:22px; text-align:center; margin-right:6px; }
+    #boardList .name { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    #boardList .score { margin-left:8px; opacity:0.95; }
+      /* Name modal */
+    #nameOverlay{position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; z-index:30;}
+    .name-modal{background:#fff; color:#222; padding:16px 18px; border-radius:12px; width:320px; box-shadow:0 10px 30px rgba(0,0,0,.3); font-family:sans-serif;}
+    .name-modal h3{margin:0 0 8px 0; font-size:18px;}
+    .name-modal input{width:100%; font-size:18px; padding:8px 10px; border-radius:8px; border:1px solid #ccc; outline:none;}
+    .name-modal .row{display:flex; align-items:center; justify-content:space-between; margin-top:8px;}
+    .name-modal .count{font-size:12px; opacity:.7;}
+    .name-modal .actions{display:flex; gap:8px; margin-top:12px; justify-content:flex-end;}
+    .name-modal button{position:static; transform:none; padding:8px 12px; font-size:14px; border-radius:8px; background:#004488; color:white;}
+    .name-modal button.secondary{background:#666;}
+    .name-modal button:disabled{opacity:.5; cursor:not-allowed;}
+  </style>
+
+  <link rel="icon" type="image/png" href="assets/images/pebble_icon.png">
+</head>
+<body>
+  <div id="title">...PEBBLE DASH...</div>
+  <canvas id="canvas"></canvas>
+  <div id="hud">
+    <div id="distanceDisplay">Distance: 0m</div>
+    <div id="highScoreDisplay">High Score: 0m</div>
+    
+  </div>
+  <div id="powerBarContainer"><div id="powerBar"></div></div>
+  <button id="powerBtn">Hold to Throw</button>
+  <button id="skillBtn">Skill</button>
+
+  <!-- audio -->
+  <audio id="mooSound" preload="auto"><source src="assets/audio/moo.mp3" type="audio/mpeg"></audio>
+  <audio id="splashSound" preload="auto"><source src="assets/audio/splash.mp3" type="audio/mpeg"></audio>
+  <audio id="bgMusic" preload="auto" loop><source src="assets/audio/bgmusic.mp3" type="audio/mpeg"></audio>
+
+  <div id="leaderboard" aria-label="Top 5 Leaderboard">
+    <div class="board-title">Top 5</div>
+    <ol id="boardList"></ol>
+  </div>
+
+  <div id="nameOverlay" role="dialog" aria-modal="true" style="display:none;">
+    <div class="name-modal">
+      <h3>New Top 5! Enter your name</h3>
+      <input id="nameInput" type="text" maxlength="5" autocomplete="off" />
+      <div class="row"><span class="count" id="charCount">0/3</span></div>
+      <div class="actions">
+        <button id="nameCancel" class="secondary">Cancel</button>
+        <button id="nameSave" disabled>Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Canvas & UI =====
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const powerBtn = document.getElementById('powerBtn');
+    const skillBtn = document.getElementById('skillBtn');
+    const powerBar = document.getElementById('powerBar');
+    const distanceDisplay = document.getElementById('distanceDisplay');
+    const highScoreDisplay = document.getElementById('highScoreDisplay');
+
+    // ===== World constants =====
+    const GROUND_Y = canvas.height * 0.7;
+
+    // Repeating land/water pattern (growing land width)
+    const LAND_PERIOD = 10000;            // every 10 km we may have land
+    const BASE_LAND_WIDTH = 350;          // starting land width (meters)
+    const LAND_GROWTH = 1.2;              // +20% width each strip
+    function landWidthForStrip(n){        // n = 1 for first land at 10,000m
+      return Math.round(BASE_LAND_WIDTH * Math.pow(LAND_GROWTH, n-1));
+    }
+
+    function isLand(x){
+      if (x < LAND_PERIOD) return false; // first 10km all water
+      const n = Math.floor(x / LAND_PERIOD); // 1-based at 10k, 20k, 30k, ...
+      const width = landWidthForStrip(n);
+      const start = n * LAND_PERIOD;
+      return x >= start && x < start + width;
+    }
+
+    function drawTerrain(){
+      // paint water for entire viewport
+      ctx.fillStyle = '#2288cc';
+      ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+
+      // overlay visible land patches
+      const viewStart = camX;
+      const viewEnd   = camX + canvas.width;
+      const firstIdx  = Math.max(1, Math.floor(viewStart / LAND_PERIOD) - 1);
+      const lastIdx   = Math.floor(viewEnd / LAND_PERIOD) + 1;
+      ctx.fillStyle = '#88aa44';
+      for (let n = firstIdx; n <= lastIdx; n++){
+        const width = landWidthForStrip(n);
+        const start = n * LAND_PERIOD;
+        const end   = start + width;
+        if (end < viewStart || start > viewEnd) continue;
+        ctx.fillRect(start - camX, GROUND_Y, width, canvas.height - GROUND_Y);
+      }
+    }
+
+    // ===== Cows on land patches =====
+    function cowsCountForStrip(n){
+      // 1 cow on 1st land strip, 2 on 2nd, 3 on 3rd, ...
+      return Math.max(1, n);
+    }
+    function cowXsForStrip(n){
+      const width = landWidthForStrip(n);
+      const start = n * LAND_PERIOD;
+      const count = cowsCountForStrip(n);
+      const xs = [];
+      const step = width / (count + 1); // evenly spaced, avoid edges
+      for (let i = 1; i <= count; i++) xs.push(start + step * i);
+      return xs;
+    }
+    function drawCows(){
+      const viewStart = camX;
+      const viewEnd   = camX + canvas.width;
+      const firstIdx  = Math.max(1, Math.floor(viewStart / LAND_PERIOD) - 1);
+      const lastIdx   = Math.floor(viewEnd / LAND_PERIOD) + 1;
+      ctx.font = '32px sans-serif';
+      ctx.textAlign = 'center';
+      for (let n = firstIdx; n <= lastIdx; n++){
+        const width = landWidthForStrip(n);
+        const start = n * LAND_PERIOD;
+        const end   = start + width;
+        if (end < viewStart || start > viewEnd) continue;
+        const xs = cowXsForStrip(n);
+        const cy = GROUND_Y - 12;
+        xs.forEach(cx => {
+          const sx = cx - camX;
+          ctx.fillText('🐄', sx, cy);
+        });
+      }
+    }
+    function checkCowCross(prevX, currX){
+      if (prevX === currX) return;
+      const minX = Math.min(prevX, currX);
+      const maxX = Math.max(prevX, currX);
+      let nStart = Math.floor(minX / LAND_PERIOD);
+      let nEnd   = Math.floor(maxX / LAND_PERIOD);
+      if (nEnd < 1) return;
+      if (nStart < 1) nStart = 1;
+      for (let n = nStart; n <= nEnd; n++){
+        const width = landWidthForStrip(n);
+        const start = n * LAND_PERIOD;
+        const end   = start + width;
+        if (end < minX || start > maxX) continue; // not in sweep range
+        const cows = cowXsForStrip(n);
+        for (const cx of cows){
+          if (cx >= minX && cx <= maxX){
+            const m = document.getElementById('mooSound');
+            if (m){ try { m.currentTime = 0; m.play(); } catch(e){} }
+          }
+        }
+      }
+    }
+
+    // ===== State =====
+    let stone = { x:100, y:GROUND_Y, vx:0, vy:0, launched:false, landed:false, bounces:0 };
+    let power = 0, charging = false, pressCount = 0, maxPresses = 3;
+    let skillAvailable = false;      // true only for 0.75s after splash
+    let camX = 0, cloudX = 0, praise = null; let birds = [];
+    let skillTimerId = null; let skillWindowStart = 0, skillWindowDuration = 750, perfectTolerance = 40;
+    let splashes = [];               // splash particles
+    let lastStoneX = stone.x; // reserved (unused for now)
+    let touchingWater = false;       // edge-trigger water contact
+    let prevOverWater = !isLand(stone.x); // track last-frame water/land above X
+    let wasAtSurface = stone.y >= GROUND_Y; // track previous-frame surface contact
+
+    let highScore = parseInt(localStorage.getItem('pebbleHighScore')) || 0;
+    highScoreDisplay.textContent = 'High Score: ' + highScore + 'm';
+    let bestLandX = parseFloat(localStorage.getItem('pebbleBestLandX'));
+    if (Number.isNaN(bestLandX)) bestLandX = null;
+
+    // ===== Leaderboard (top 5) =====
+    const BOARD_KEY = 'pebbleLeaderboardV3Top5';
+    const SEVEN_DAYS = 7*24*60*60*1000;
+
+    function loadBoard(){
+      try { const raw = localStorage.getItem(BOARD_KEY); return raw ? JSON.parse(raw) : []; }
+      catch(e){ return []; }
+    }
+    function saveBoard(arr){ localStorage.setItem(BOARD_KEY, JSON.stringify(arr)); }
+    function pruneAgingNames(board){
+      board.sort((a,b)=>b.score-a.score);
+      const now = Date.now();
+      for (let i=0;i<board.length;i++){
+        if (i>=3 && board[i].name && (now - (board[i].ts||0) > SEVEN_DAYS)){
+          board[i].name = '—';
+        }
+      }
+    }
+    function renderBoard(){
+      let board = loadBoard();
+      pruneAgingNames(board);
+      board.sort((a,b)=>b.score-a.score);
+      board = board.slice(0,5);
+      saveBoard(board);
+      const ol = document.getElementById('boardList');
+      if (!ol) return;
+      ol.innerHTML = '';
+      const cups = ['🥇','🥈','🥉'];
+      for (let i=0;i<5;i++){
+        const e = board[i];
+        const li = document.createElement('li');
+        const cup = document.createElement('span'); cup.className='cup'; cup.textContent = cups[i] || (i+1)+'.';
+        const name = document.createElement('span'); name.className='name'; name.textContent = e ? (e.name||'—') : '—';
+        const score = document.createElement('span'); score.className='score'; score.textContent = e ? (e.score+'m') : '';
+        li.appendChild(cup); li.appendChild(name); li.appendChild(score);
+        ol.appendChild(li);
+      }
+    }
+
+    function cleanPlayerName(name){
+
+      // keep only letters/numbers
+      name = name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+      // blocked words list
+      const banned = [
+        'FUCK',
+        'SHIT',
+        'CUNT',
+        'WANK',
+        'DICK',
+        'PISS',
+        'COCK',
+        'TWAT',
+        'ARSE',
+        'FUK',
+        'FK',
+        'SEX',
+        'TITS',
+        'TITTS',
+        'PENIS'
+      ];
+
+      for (const bad of banned){
+        if (name.includes(bad)){
+          return 'PLYR1';
+        }
+      }
+
+      // fallback if empty
+      if (name.length === 0){
+        return 'PLYR1';
+      }
+
+      return name;
+    }
+
+    function promptNameModal(maxLen=3){
+      return new Promise(resolve=>{
+        const overlay = document.getElementById('nameOverlay');
+        const input   = document.getElementById('nameInput');
+        const saveBtn = document.getElementById('nameSave');
+        const cancel  = document.getElementById('nameCancel');
+        const count   = document.getElementById('charCount');
+        function update(){
+          let v = input.value || '';
+          if (v.length > maxLen) { input.value = v.slice(0,maxLen); v = input.value; }
+          count.textContent = v.length + '/' + maxLen;
+          saveBtn.disabled = v.trim().length === 0;
+        }
+        function cleanup(){
+          overlay.style.display='none';
+          input.value='';
+          count.textContent='0/'+maxLen;
+          saveBtn.disabled=true;
+          input.removeEventListener('input', update);
+          cancel.removeEventListener('click', onCancel);
+          saveBtn.removeEventListener('click', onSave);
+          document.removeEventListener('keydown', onKey);
+        }
+        function onSave(){
+          let name = cleanPlayerName((input.value||'').trim());
+          cleanup();
+          resolve(name);
+        }
+        function onCancel(){ cleanup(); resolve('—'); }
+        function onKey(e){ if(e.key==='Enter' && !saveBtn.disabled) onSave(); else if(e.key==='Escape') onCancel(); }
+        overlay.style.display='flex';
+        input.maxLength = maxLen;
+        input.value='';
+        update();
+        setTimeout(()=>input.focus(),0);
+        input.addEventListener('input', update);
+        cancel.addEventListener('click', onCancel);
+        saveBtn.addEventListener('click', onSave);
+        document.addEventListener('keydown', onKey);
+      });
+    }
+
+    async function maybeRecordScore(score){
+      let board = loadBoard();
+      board.sort((a,b)=>b.score-a.score);
+      const qualifies = (board.length < 5) || (score > (board[board.length-1]?.score||0));
+      if (qualifies){
+        const name = await promptNameModal(5);
+        board.push({ name, score, ts: Date.now() });
+        board.sort((a,b)=>b.score-a.score);
+        board = board.slice(0,5);
+        saveBoard(board);
+      }
+      renderBoard();
+    }
+
+    // Initial draw of leaderboard
+    renderBoard();
+
+    // Keep leaderboard narrower than the HUD
+    function syncBoardWidth(){
+      const board = document.getElementById('leaderboard');
+      if (!board) return;
+      board.style.width = '150px';
+    }
+    window.addEventListener('resize', syncBoardWidth);
+    setTimeout(syncBoardWidth, 0);
+
+    // Initialize birds
+    initBirds(9);
+
+    // ===== Camera =====
+    function updateCamera(){
+      camX = stone.launched ? Math.max(0, stone.x - canvas.width/2) : 0;
+    }
+
+    // ===== Clouds & Bird =====
+    function drawClouds(){
+      for(let i=0;i<8;i++){
+        const x = (cloudX + i*400 - camX*0.2) % (canvas.width+400) - 100;
+        const y = 80 + (i%2)*30;
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(x, y, 30, 0, Math.PI*2);
+        ctx.arc(x+30, y-10, 30, 0, Math.PI*2);
+        ctx.arc(x+60, y, 30, 0, Math.PI*2);
+        ctx.fill();
+      }
+      for(let i=0;i<10;i++){
+        const x = (cloudX + i*300 - camX*0.35) % (canvas.width+300) - 100;
+        const y = 160 + (i%2)*30;
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(x, y, 30, 0, Math.PI*2);
+        ctx.arc(x+30, y-10, 30, 0, Math.PI*2);
+        ctx.arc(x+60, y, 30, 0, Math.PI*2);
+        ctx.fill();
+      }
+      cloudX -= 0.5;
+    }
+    function initBirds(n=7){
+      birds = [];
+      for(let i=0;i<n;i++){
+        birds.push({
+          x: canvas.width + Math.random()*800,
+          y: 110 + Math.random()*120,
+          speed: 1.5 + Math.random()*1.8,
+          wing: Math.random()<0.5 ? 0 : 1
+        });
+      }
+    }
+    function drawBirds(){
+      ctx.strokeStyle='black';
+      birds.forEach(b=>{
+        const sx = b.x - camX*0.4;
+        ctx.beginPath();
+        ctx.moveTo(sx, b.y);
+        ctx.quadraticCurveTo(sx + 10, b.y + (b.wing ? -10 : 10), sx + 20, b.y);
+        ctx.stroke();
+        b.x -= b.speed;
+        if (sx < -40){
+          b.x = camX + canvas.width + Math.random()*300;
+          b.y = 110 + Math.random()*120;
+          b.speed = 1.5 + Math.random()*1.8;
+          b.wing ^= 1;
+        }
+      });
+    }
+
+    // ===== Skill Button & Visuals =====
+    function updateSkillVisual(){
+      if (skillAvailable && !stone.landed){
+        skillBtn.classList.add('skill-active');
+        skillBtn.classList.remove('skill-inactive');
+        skillBtn.setAttribute('aria-disabled','false');
+      } else {
+        skillBtn.classList.remove('skill-active');
+        skillBtn.classList.add('skill-inactive');
+        skillBtn.setAttribute('aria-disabled','true');
+      }
+    }
+
+    // Show skill button and optionally activate a timed boost window (0.75s)
+    function showSkillWindow(duration=750, activate=false){
+      if (stone.landed) return;
+      skillBtn.style.display = 'block';
+      powerBtn.style.display = 'none';
+      if (activate){
+        if (skillTimerId) { clearTimeout(skillTimerId); skillTimerId = null; }
+        skillWindowStart = performance.now();
+        skillWindowDuration = duration;
+        skillAvailable = true;
+        updateSkillVisual();
+        skillTimerId = setTimeout(() => {
+          skillAvailable = false;
+          updateSkillVisual();
+          skillTimerId = null;
+        }, duration);
+      } else {
+        skillAvailable = false;
+        updateSkillVisual();
+      }
+    }
+
+    // Skill boost (half current effect = +12.5 vx, -12.5 vy) — only during active window
+    skillBtn.addEventListener('click', () => {
+      if (skillAvailable && !stone.landed) {
+        const now = performance.now();
+        const t = now - skillWindowStart;
+        const isPerfect = Math.abs(t - 500) <= perfectTolerance; // ~0.5s sweet spot
+        // base boost
+        stone.vx += 12.5;
+        stone.vy -= 12.5;
+        if (isPerfect){
+          // extra perfect-timing boost
+          stone.vx += 12.5;
+          stone.vy -= 12.5;
+          showPraise('WoW!', 88);
+        } else {
+          showPraise();
+        }
+        // consume the current timing window
+        skillAvailable = false;
+        updateSkillVisual();
+        if (skillTimerId) { clearTimeout(skillTimerId); skillTimerId = null; }
+      }
+    });
+
+    // ===== Landing logic =====
+    function landStone(onLand=false){
+      stone.landed = true;
+      powerBtn.disabled = true; // disable hold after landing
+      touchingWater = false;    // ensure contact flag cleared
+      skillAvailable = false;   // deactivate skill visuals
+      updateSkillVisual();
+      const d = Math.round(stone.x);
+      // play cow moo only when landing on land
+      if (onLand) {
+        const m = document.getElementById('mooSound');
+        if (m){ try { m.currentTime = 0; m.play(); } catch(e){} }
+      }
+      distanceDisplay.textContent = 'Distance: ' + d + 'm';
+      // save best land flag
+      if (bestLandX === null || stone.x > bestLandX) {
+        bestLandX = stone.x;
+        localStorage.setItem('pebbleBestLandX', String(bestLandX));
+      }
+      if (d > highScore) {
+        highScore = d;
+        localStorage.setItem('pebbleHighScore', d);
+        highScoreDisplay.textContent = 'High Score: ' + d + 'm';
+      }
+      (async ()=>{ await maybeRecordScore(d); setTimeout(()=>location.reload(), 300); })();
+    }
+
+    function drawBestLandFlag(){
+      if (bestLandX == null) return;
+      const fx = bestLandX - camX;
+      // pole
+      ctx.strokeStyle = 'red';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(fx, GROUND_Y);
+      ctx.lineTo(fx, GROUND_Y - 60);
+      ctx.stroke();
+      // flag
+      ctx.fillStyle = 'red';
+      ctx.beginPath();
+      ctx.moveTo(fx, GROUND_Y - 60);
+      ctx.lineTo(fx + 30, GROUND_Y - 50);
+      ctx.lineTo(fx, GROUND_Y - 40);
+      ctx.closePath();
+      ctx.fill();
+      // label
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(Math.round(bestLandX) + 'm', fx, GROUND_Y - 70);
+    }
+
+    // ===== Praise popup =====
+    function showPraise(txt=null, size=54){
+      const praiseMessages = [
+        'Excellent!',
+        'Well Done!',
+        'Keep Going!',
+        'Amazing!',
+        'Keep it Up!'
+      ];
+
+      const msg = txt || praiseMessages[Math.floor(Math.random() * praiseMessages.length)];
+
+      praise = {
+        text: msg,
+        size,
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        alpha: 1,
+        vy: -0.4,
+        screenFixed: true,
+        color: msg === 'WoW!' ? 'yellow' : 'white'
+      };
+    }
+    function updatePraise(){
+      if(!praise) return;
+      praise.y += praise.vy;
+      praise.alpha -= 0.02;
+      if(praise.alpha <= 0) praise = null;
+    }
+    function drawPraise(){
+      if(!praise) return;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, praise.alpha);
+
+      // Keep WoW! bigger than the other praise words
+      const drawSize = praise.text === 'WoW!'
+        ? (praise.size || 36) + 12
+        : (praise.size || 36);
+
+      ctx.font = 'bold ' + drawSize + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 4;
+      const drawX = praise.screenFixed ? praise.x : praise.x - camX;
+      ctx.strokeText(praise.text, drawX, praise.y);
+      ctx.fillStyle = praise.color || 'white';
+      ctx.fillText(praise.text, drawX, praise.y);
+      ctx.restore();
+    }
+
+    // ===== Splashes =====
+    function createSplash(x, y){
+      const s = document.getElementById('splashSound');
+      if (s){ try { s.currentTime = 0; s.play(); } catch(e){} }
+      for(let i=0;i<12;i++){
+        splashes.push({ x, y, vx:(Math.random()-0.5)*4, vy:-Math.random()*4, alpha:1 });
+      }
+    }
+    
+    function updateSplashes(){
+      for(let i=splashes.length-1;i>=0;i--){
+        const p = splashes[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.2;
+        p.alpha -= 0.03;
+        if(p.alpha <= 0) splashes.splice(i,1);
+      }
+    }
+    function drawSplashes(){
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      splashes.forEach(p=>{ ctx.beginPath(); ctx.arc(p.x - camX, p.y, 2, 0, Math.PI*2); ctx.fill(); });
+    }
+
+    // ===== Main loop =====
+    function animate(){
+      requestAnimationFrame(animate);
+      updateCamera();
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      // Sky
+      ctx.fillStyle = '#87ceeb';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      // Sun
+      ctx.fillStyle='yellow';
+      ctx.beginPath();
+      ctx.arc(canvas.width-100, 80, 40, 0, Math.PI*2);
+      ctx.fill();
+
+      // Terrain & flags & cows
+      drawTerrain();
+      drawBestLandFlag();
+      drawCows();
+
+      // Decorations
+      drawClouds();
+      drawBirds();
+
+      // Physics
+      if (stone.launched && !stone.landed) {
+        const prevY = stone.y;
+        const prevSurface = wasAtSurface;
+
+        stone.vy += 0.5;
+        stone.x += stone.vx;
+        stone.y += stone.vy;
+
+        
+        const overWaterNow = !isLand(stone.x);
+        const atSurfaceNow = stone.y >= GROUND_Y;
+
+        if (atSurfaceNow) {
+          stone.y = GROUND_Y;
+
+          // triggers for opening skill window
+          const verticalTouch = (prevY < GROUND_Y) && overWaterNow; // true splash
+          const horizontalZoneCross = (!prevOverWater && overWaterNow) && prevSurface; // land->water while at surface
+
+          if (overWaterNow) {
+            const trigger = verticalTouch || horizontalZoneCross || !touchingWater;
+            if (trigger) {
+              createSplash(stone.x, stone.y);
+              showSkillWindow(750, true);
+            }
+            touchingWater = true;
+            stone.vy *= -0.5;
+            stone.vx *= 0.7;
+            stone.bounces++;
+            if (stone.bounces >= 100 || (stone.vx < 0.5 && Math.abs(stone.vy) < 1)) landStone(false);
+          } else {
+            touchingWater = false;
+            landStone(true);
+          }
+        } else {
+          touchingWater = false; // airborne
+        }
+
+        prevOverWater = overWaterNow;
+        wasAtSurface = atSurfaceNow;
+
+        distanceDisplay.textContent = 'Distance: ' + Math.round(stone.x) + 'm';
+      }
+
+      // Stone
+      ctx.fillStyle = '#444';
+      ctx.beginPath();
+      ctx.ellipse(stone.x - camX, stone.y, 12, 8, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      updatePraise();
+      drawPraise();
+      updateSplashes();
+      drawSplashes();
+    }
+    animate();
+
+    // ===== Charging & Launch =====
+    function chargePower(){
+      if (!charging || power >= 1) return;
+      power += 0.01;
+      powerBar.style.width = (power*100) + '%';
+      requestAnimationFrame(chargePower);
+    }
+    function releasePower(){
+      if (!charging || pressCount >= maxPresses || stone.landed) return;
+      charging = false;
+      powerBar.style.width = '0%';
+      pressCount++;
+      if (!stone.launched) {
+        stone.vx = 6 + power * 15;
+        stone.vy = -12 - power * 10;
+        stone.launched = true;
+      } else {
+        stone.vx += 3 + power * 12;
+        stone.vy += -10 - power * 8;
+      }
+      powerBtn.style.display = 'none';
+      // show skill button after launch; availability handled at splash only
+      showSkillWindow(750, false);
+      power = 0;
+      if (pressCount >= maxPresses) powerBtn.disabled = true;
+    }
+
+    powerBtn.addEventListener('mousedown', () => {
+      if (pressCount < maxPresses && !stone.landed) {
+        charging = true; power = 0; chargePower();
+      }
+    });
+    powerBtn.addEventListener('mouseup', releasePower);
+    // touch support
+    powerBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); if (pressCount < maxPresses && !stone.landed){ charging = true; power = 0; chargePower(); } }, { passive:false });
+    powerBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); releasePower(); }, { passive:false });
+
+    // ===== Self-tests (console) =====
+    function runSelfTests(){
+      const tests = [];
+      // helper to assert first 5 strips using growth widths
+      for (let n = 1; n <= 5; n++){
+        const start = n * LAND_PERIOD;
+        const width = landWidthForStrip(n);
+        tests.push([`land${n} @start`,  isLand(start)]);
+        tests.push([`land${n} @end-1`, isLand(start + width - 1)]);
+        tests.push([`water${n} @end`,  !isLand(start + width)]);
+      }
+      // water checks between strips
+      tests.push(['water before first land 9999', !isLand(9999)]);
+      tests.push(['mid water 15000', !isLand(15000)]);
+
+      let allPass = true;
+      for (const [name, ok] of tests){
+        if (!ok) { console.error('Test FAIL:', name); allPass = false; }
+        else      { console.log('Test OK:', name); }
+      }
+      if (allPass) console.log('All terrain tests passed ✅');
+    }
+    // Cow count tests (first three strips)
+    console.log('Cow tests:', cowsCountForStrip(1)===1, cowsCountForStrip(2)===2, cowsCountForStrip(3)===3);
+    runSelfTests();
+
+
+    // Audio load diagnostics
+    document.querySelectorAll('audio').forEach(a => {
+      a.onerror = () => console.log('Audio failed to load:', a.currentSrc);
+    });
+
+    // Start background music on first interaction
+    function startBgMusic(){ const m=document.getElementById('bgMusic'); if(m){ try{ m.currentTime=0; m.play(); }catch(e){} } }
+    document.body.addEventListener('click', startBgMusic, {once:true});
+  </script>
+</body>
+</html>
