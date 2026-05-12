@@ -48,7 +48,7 @@
       display:none;
       position:fixed;
       inset:0;
-      background:#111;
+      background:rgba(0,0,0,0.35);
       color:white;
       z-index:9999;
       font-family:sans-serif;
@@ -60,24 +60,58 @@
       padding:30px;
       box-sizing:border-box;
       line-height:1.35;
+      text-shadow:2px 2px 8px black;
+      backdrop-filter: blur(3px);
     }
     #rotateMessage .small {
       display:block;
       margin-top:14px;
       font-size:16px;
       font-weight:normal;
-      opacity:.85;
+      opacity:.95;
     }
+
+    /* Show the rotate message in portrait, but keep the game visible behind it */
     @media screen and (orientation: portrait) and (max-width: 900px) {
       #rotateMessage { display:flex; flex-direction:column; }
-      canvas,
-      #hud,
-      #leaderboard,
-      #powerBarContainer,
+    }
+
+    /* Larger phone controls in landscape */
+    @media screen and (orientation: landscape) and (max-height: 600px) {
       #powerBtn,
-      #skillBtn,
+      #skillBtn {
+        bottom:55px;
+        padding:24px 48px;
+        font-size:32px;
+        border-radius:16px;
+        min-width:260px;
+      }
+
+      #powerBarContainer {
+        bottom:135px;
+        width:60vw;
+        max-width:520px;
+        height:34px;
+        border-radius:17px;
+      }
+
+      #hud {
+        top:10px;
+        left:10px;
+        font-size:16px;
+        padding:8px 14px;
+      }
+
+      #leaderboard {
+        top:90px;
+        left:10px;
+        transform:scale(0.9);
+        transform-origin:top left;
+      }
+
       #title {
-        display:none !important;
+        top:10px;
+        font-size:42px;
       }
     }
   </style>
@@ -129,12 +163,20 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
+    let GROUND_Y = canvas.height * 0.7;
+
     function resizeGameCanvas(){
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      GROUND_Y = canvas.height * 0.7;
+
+      // If the pebble has not been launched yet, keep it sitting on the resized waterline.
+      if (typeof stone !== 'undefined' && !stone.launched) {
+        stone.y = GROUND_Y;
+      }
     }
     window.addEventListener('resize', resizeGameCanvas);
-    window.addEventListener('orientationchange', () => setTimeout(resizeGameCanvas, 250));
+    window.addEventListener('orientationchange', () => setTimeout(resizeGameCanvas, 350));
 
     const powerBtn = document.getElementById('powerBtn');
     const skillBtn = document.getElementById('skillBtn');
@@ -143,7 +185,6 @@
     const highScoreDisplay = document.getElementById('highScoreDisplay');
 
     // ===== World constants =====
-    const GROUND_Y = canvas.height * 0.7;
 
     // Repeating land/water pattern (growing land width)
     const LAND_PERIOD = 10000;            // every 10 km we may have land
@@ -801,6 +842,9 @@
     // Start background music on first interaction
     function startBgMusic(){ const m=document.getElementById('bgMusic'); if(m){ try{ m.currentTime=0; m.play(); }catch(e){} } }
     document.body.addEventListener('click', startBgMusic, {once:true});
+
+    // Final mobile layout nudge after the browser address bar/orientation settles
+    setTimeout(resizeGameCanvas, 500);
   </script>
 </body>
 </html>
