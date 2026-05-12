@@ -35,7 +35,7 @@
     #nameOverlay{position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; z-index:30;}
     .name-modal{background:#fff; color:#222; padding:16px 18px; border-radius:12px; width:320px; box-shadow:0 10px 30px rgba(0,0,0,.3); font-family:sans-serif;}
     .name-modal h3{margin:0 0 8px 0; font-size:18px;}
-    .name-modal input{width:100%; font-size:18px; padding:8px 10px; border-radius:8px; border:1px solid #ccc; outline:none;}
+    .name-modal input{width:100%; font-size:20px; padding:12px 10px; border-radius:8px; border:1px solid #ccc; outline:none; box-sizing:border-box;}
     .name-modal .row{display:flex; align-items:center; justify-content:space-between; margin-top:8px;}
     .name-modal .count{font-size:12px; opacity:.7;}
     .name-modal .actions{display:flex; gap:8px; margin-top:12px; justify-content:flex-end;}
@@ -149,7 +149,7 @@
   <div id="nameOverlay" role="dialog" aria-modal="true" style="display:none;">
     <div class="name-modal">
       <h3>New Top 5! Enter your name</h3>
-      <input id="nameInput" type="text" maxlength="5" autocomplete="off" />
+      <input id="nameInput" type="text" maxlength="5" autocomplete="off" placeholder="Tap here" inputmode="text" />
       <div class="row"><span class="count" id="charCount">0/3</span></div>
       <div class="actions">
         <button id="nameCancel" class="secondary">Cancel</button>
@@ -337,10 +337,11 @@
     let skillTimerId = null; let skillWindowStart = 0, skillWindowDuration = 750, perfectTolerance = 40;
     let splashes = [];               // splash particles
 
-    // Keep game speed consistent in normal browsers and in-app browsers like WhatsApp.
-    // Some mobile WebViews run requestAnimationFrame at 90Hz/120Hz, which made the pebble too fast.
+    // Keep game speed consistent across Samsung/Android, iPhone/Safari and in-app browsers.
+    // Game movement is scaled to time, so 60Hz/90Hz/120Hz devices feel similar.
     const TARGET_FRAME_MS = 1000 / 60;
     let lastFrameTime = 0;
+    let frameScale = 1;
     let lastStoneX = stone.x; // reserved (unused for now)
     let touchingWater = false;       // edge-trigger water contact
     let prevOverWater = !isLand(stone.x); // track last-frame water/land above X
@@ -462,7 +463,15 @@
         input.maxLength = maxLen;
         input.value='';
         update();
-        setTimeout(()=>input.focus(),0);
+        setTimeout(()=>{
+          try {
+            input.focus({ preventScroll:false });
+            input.select();
+            input.setSelectionRange(0, input.value.length);
+          } catch(e) {
+            try { input.focus(); input.select(); } catch(err) {}
+          }
+        }, 150);
         input.addEventListener('input', update);
         cancel.addEventListener('click', onCancel);
         saveBtn.addEventListener('click', onSave);
@@ -526,7 +535,7 @@
         ctx.arc(x+60, y, 30, 0, Math.PI*2);
         ctx.fill();
       }
-      cloudX -= 0.5;
+      cloudX -= 0.5 * frameScale;
     }
     function initBirds(n=7){
       birds = [];
@@ -547,7 +556,7 @@
         ctx.moveTo(sx, b.y);
         ctx.quadraticCurveTo(sx + 10, b.y + (b.wing ? -10 : 10), sx + 20, b.y);
         ctx.stroke();
-        b.x -= b.speed;
+        b.x -= b.speed * frameScale;
         if (sx < -40){
           b.x = camX + canvas.width + Math.random()*300;
           b.y = 110 + Math.random()*120;
@@ -693,8 +702,8 @@
     }
     function updatePraise(){
       if(!praise) return;
-      praise.y += praise.vy;
-      praise.alpha -= 0.02;
+      praise.y += praise.vy * frameScale;
+      praise.alpha -= 0.02 * frameScale;
       if(praise.alpha <= 0) praise = null;
     }
     function drawPraise(){
@@ -730,10 +739,10 @@
     function updateSplashes(){
       for(let i=splashes.length-1;i>=0;i--){
         const p = splashes[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += 0.2;
-        p.alpha -= 0.03;
+        p.x += p.vx * frameScale;
+        p.y += p.vy * frameScale;
+        p.vy += 0.2 * frameScale;
+        p.alpha -= 0.03 * frameScale;
         if(p.alpha <= 0) splashes.splice(i,1);
       }
     }
@@ -748,10 +757,10 @@
 
       if (!lastFrameTime) lastFrameTime = timestamp;
       const elapsed = timestamp - lastFrameTime;
+      lastFrameTime = timestamp;
 
-      // Skip extra frames on 90Hz/120Hz mobile/in-app browsers so physics stays at 60fps.
-      if (elapsed < TARGET_FRAME_MS - 0.5) return;
-      lastFrameTime = timestamp - (elapsed % TARGET_FRAME_MS);
+      // Clamp avoids a huge jump if the browser pauses briefly.
+      frameScale = Math.min(Math.max(elapsed / TARGET_FRAME_MS, 0.5), 2.0);
 
       updateCamera();
       ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -780,9 +789,9 @@
         const prevY = stone.y;
         const prevSurface = wasAtSurface;
 
-        stone.vy += 0.5;
-        stone.x += stone.vx;
-        stone.y += stone.vy;
+        stone.vy += 0.5 * frameScale;
+        stone.x += stone.vx * frameScale;
+        stone.y += stone.vy * frameScale;
 
         
         const overWaterNow = !isLand(stone.x);
