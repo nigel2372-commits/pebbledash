@@ -78,42 +78,42 @@
       flex-direction:column;
     }
 
-    /* Phone controls in landscape - bigger than desktop, but not too large */
+    /* Phone controls in landscape - compact version */
     @media screen and (orientation: landscape) and (max-height: 600px) {
       #powerBtn,
       #skillBtn {
-        bottom:42px;
-        padding:17px 34px;
-        font-size:23px;
-        border-radius:13px;
-        min-width:205px;
+        bottom:16px;
+        padding:9px 18px;
+        font-size:16px;
+        border-radius:9px;
+        min-width:130px;
       }
 
       #powerBarContainer {
-        bottom:108px;
-        width:48vw;
-        max-width:390px;
-        height:24px;
-        border-radius:12px;
+        bottom:62px;
+        width:38vw;
+        max-width:300px;
+        height:16px;
+        border-radius:8px;
       }
 
       #hud {
-        top:8px;
-        left:8px;
-        font-size:14px;
-        padding:7px 12px;
+        top:6px;
+        left:6px;
+        font-size:12px;
+        padding:6px 10px;
       }
 
       #leaderboard {
-        top:78px;
-        left:8px;
-        transform:scale(0.78);
+        top:62px;
+        left:6px;
+        transform:scale(0.68);
         transform-origin:top left;
       }
 
       #title {
-        top:8px;
-        font-size:34px;
+        top:6px;
+        font-size:28px;
       }
     }
   </style>
@@ -164,6 +164,8 @@
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
 
     let GROUND_Y = canvas.height * 0.7;
 
@@ -179,14 +181,32 @@
       document.body.classList.toggle('show-rotate-message', isPhonePortrait());
     }
 
+    function getMobileLandscapeZoom(){
+      const w = window.innerWidth || document.documentElement.clientWidth || screen.width;
+      const h = window.innerHeight || document.documentElement.clientHeight || screen.height;
+      const isSmallLandscape = Math.min(w, h) <= 600 && w > h;
+
+      // Lower number = more zoomed out on phone landscape.
+      // 0.78 gives a wider/taller view without changing the game physics.
+      return isSmallLandscape ? 0.78 : 1;
+    }
+
     function resizeGameCanvas(){
       // visualViewport helps reduce odd zoom/crop behaviour on mobile browsers after rotation.
       const vv = window.visualViewport;
       const w = Math.round((vv && vv.width) ? vv.width : (window.innerWidth || document.documentElement.clientWidth || screen.width));
       const h = Math.round((vv && vv.height) ? vv.height : (window.innerHeight || document.documentElement.clientHeight || screen.height));
 
-      canvas.width = w;
-      canvas.height = h;
+      const zoom = getMobileLandscapeZoom();
+
+      // Keep the canvas CSS size equal to the phone screen,
+      // but make the internal drawing area larger on mobile landscape.
+      // The browser then scales the larger game view down to fit the screen.
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      canvas.width = Math.round(w / zoom);
+      canvas.height = Math.round(h / zoom);
+
       GROUND_Y = canvas.height * 0.7;
 
       updateRotateMessage();
