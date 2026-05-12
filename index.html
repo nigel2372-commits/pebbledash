@@ -78,42 +78,42 @@
       flex-direction:column;
     }
 
-    /* Larger phone controls in landscape */
+    /* Phone controls in landscape - bigger than desktop, but not too large */
     @media screen and (orientation: landscape) and (max-height: 600px) {
       #powerBtn,
       #skillBtn {
-        bottom:55px;
-        padding:24px 48px;
-        font-size:32px;
-        border-radius:16px;
-        min-width:260px;
+        bottom:42px;
+        padding:17px 34px;
+        font-size:23px;
+        border-radius:13px;
+        min-width:205px;
       }
 
       #powerBarContainer {
-        bottom:135px;
-        width:60vw;
-        max-width:520px;
-        height:34px;
-        border-radius:17px;
+        bottom:108px;
+        width:48vw;
+        max-width:390px;
+        height:24px;
+        border-radius:12px;
       }
 
       #hud {
-        top:10px;
-        left:10px;
-        font-size:16px;
-        padding:8px 14px;
+        top:8px;
+        left:8px;
+        font-size:14px;
+        padding:7px 12px;
       }
 
       #leaderboard {
-        top:90px;
-        left:10px;
-        transform:scale(0.9);
+        top:78px;
+        left:8px;
+        transform:scale(0.78);
         transform-origin:top left;
       }
 
       #title {
-        top:10px;
-        font-size:42px;
+        top:8px;
+        font-size:34px;
       }
     }
   </style>
@@ -180,8 +180,10 @@
     }
 
     function resizeGameCanvas(){
-      const w = window.innerWidth || document.documentElement.clientWidth || screen.width;
-      const h = window.innerHeight || document.documentElement.clientHeight || screen.height;
+      // visualViewport helps reduce odd zoom/crop behaviour on mobile browsers after rotation.
+      const vv = window.visualViewport;
+      const w = Math.round((vv && vv.width) ? vv.width : (window.innerWidth || document.documentElement.clientWidth || screen.width));
+      const h = Math.round((vv && vv.height) ? vv.height : (window.innerHeight || document.documentElement.clientHeight || screen.height));
 
       canvas.width = w;
       canvas.height = h;
@@ -196,6 +198,7 @@
     }
 
     window.addEventListener('resize', resizeGameCanvas);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', resizeGameCanvas);
     window.addEventListener('orientationchange', () => {
       // Multiple delayed checks help mobile browsers that update dimensions late.
       setTimeout(resizeGameCanvas, 100);
@@ -207,6 +210,7 @@
     const powerBtn = document.getElementById('powerBtn');
     const skillBtn = document.getElementById('skillBtn');
     const powerBar = document.getElementById('powerBar');
+    const powerBarContainer = document.getElementById('powerBarContainer');
     const distanceDisplay = document.getElementById('distanceDisplay');
     const highScoreDisplay = document.getElementById('highScoreDisplay');
 
@@ -808,6 +812,11 @@
       charging = false;
       powerBar.style.width = '0%';
       pressCount++;
+
+      // After the first throw, hide the charge bar to keep mobile view cleaner.
+      if (pressCount >= 1 && powerBarContainer) {
+        powerBarContainer.style.display = 'none';
+      }
       if (!stone.launched) {
         stone.vx = 6 + power * 15;
         stone.vy = -12 - power * 10;
