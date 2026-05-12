@@ -71,9 +71,11 @@
       opacity:.95;
     }
 
-    /* Show the rotate message in portrait, but keep the game visible behind it */
-    @media screen and (orientation: portrait) and (max-width: 900px) {
-      #rotateMessage { display:flex; flex-direction:column; }
+    /* Show the rotate message using JS instead of CSS orientation detection.
+       Some Samsung/Android browsers do not update CSS orientation reliably after rotate. */
+    body.show-rotate-message #rotateMessage {
+      display:flex;
+      flex-direction:column;
     }
 
     /* Larger phone controls in landscape */
@@ -165,18 +167,42 @@
 
     let GROUND_Y = canvas.height * 0.7;
 
+    function isPhonePortrait(){
+      // More reliable than CSS orientation on some Samsung/Android browsers.
+      const w = window.innerWidth || document.documentElement.clientWidth || screen.width;
+      const h = window.innerHeight || document.documentElement.clientHeight || screen.height;
+      const isSmallDevice = Math.min(w, h) <= 900;
+      return isSmallDevice && h > w;
+    }
+
+    function updateRotateMessage(){
+      document.body.classList.toggle('show-rotate-message', isPhonePortrait());
+    }
+
     function resizeGameCanvas(){
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const w = window.innerWidth || document.documentElement.clientWidth || screen.width;
+      const h = window.innerHeight || document.documentElement.clientHeight || screen.height;
+
+      canvas.width = w;
+      canvas.height = h;
       GROUND_Y = canvas.height * 0.7;
+
+      updateRotateMessage();
 
       // If the pebble has not been launched yet, keep it sitting on the resized waterline.
       if (typeof stone !== 'undefined' && !stone.launched) {
         stone.y = GROUND_Y;
       }
     }
+
     window.addEventListener('resize', resizeGameCanvas);
-    window.addEventListener('orientationchange', () => setTimeout(resizeGameCanvas, 350));
+    window.addEventListener('orientationchange', () => {
+      // Multiple delayed checks help mobile browsers that update dimensions late.
+      setTimeout(resizeGameCanvas, 100);
+      setTimeout(resizeGameCanvas, 350);
+      setTimeout(resizeGameCanvas, 800);
+    });
+    window.addEventListener('load', resizeGameCanvas);
 
     const powerBtn = document.getElementById('powerBtn');
     const skillBtn = document.getElementById('skillBtn');
@@ -843,8 +869,9 @@
     function startBgMusic(){ const m=document.getElementById('bgMusic'); if(m){ try{ m.currentTime=0; m.play(); }catch(e){} } }
     document.body.addEventListener('click', startBgMusic, {once:true});
 
-    // Final mobile layout nudge after the browser address bar/orientation settles
-    setTimeout(resizeGameCanvas, 500);
+    // Final mobile layout nudges after the browser address bar/orientation settles
+    setTimeout(resizeGameCanvas, 300);
+    setTimeout(resizeGameCanvas, 1000);
   </script>
 </body>
 </html>
