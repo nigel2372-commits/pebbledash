@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Pebble Dash – Growing Land & Skill Fix</title>
   <style>
     html, body { margin:0; padding:0; overflow:hidden; background:#87ceeb; }
@@ -41,11 +42,53 @@
     .name-modal button{position:static; transform:none; padding:8px 12px; font-size:14px; border-radius:8px; background:#004488; color:white;}
     .name-modal button.secondary{background:#666;}
     .name-modal button:disabled{opacity:.5; cursor:not-allowed;}
+
+    /* Mobile portrait rotate message */
+    #rotateMessage {
+      display:none;
+      position:fixed;
+      inset:0;
+      background:#111;
+      color:white;
+      z-index:9999;
+      font-family:sans-serif;
+      font-size:28px;
+      font-weight:bold;
+      text-align:center;
+      align-items:center;
+      justify-content:center;
+      padding:30px;
+      box-sizing:border-box;
+      line-height:1.35;
+    }
+    #rotateMessage .small {
+      display:block;
+      margin-top:14px;
+      font-size:16px;
+      font-weight:normal;
+      opacity:.85;
+    }
+    @media screen and (orientation: portrait) and (max-width: 900px) {
+      #rotateMessage { display:flex; flex-direction:column; }
+      canvas,
+      #hud,
+      #leaderboard,
+      #powerBarContainer,
+      #powerBtn,
+      #skillBtn,
+      #title {
+        display:none !important;
+      }
+    }
   </style>
 
   <link rel="icon" type="image/png" href="assets/images/pebble_icon.png">
 </head>
 <body>
+  <div id="rotateMessage">
+    📱 Rotate your phone to landscape to play Pebble Dash
+    <span class="small">Landscape gives you the best view and controls.</span>
+  </div>
   <div id="title">...PEBBLE DASH...</div>
   <canvas id="canvas"></canvas>
   <div id="hud">
@@ -85,6 +128,13 @@
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+
+    function resizeGameCanvas(){
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeGameCanvas);
+    window.addEventListener('orientationchange', () => setTimeout(resizeGameCanvas, 250));
 
     const powerBtn = document.getElementById('powerBtn');
     const skillBtn = document.getElementById('skillBtn');
