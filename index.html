@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Pebble Dash – Growing Land & Skill Fix</title>
   <style>
-    html, body { margin:0; padding:0; overflow:hidden; background:#87ceeb; }
+    html, body { margin:0; padding:0; overflow:hidden; background:#87ceeb; touch-action:manipulation; user-select:none; -webkit-user-select:none; }
     canvas { display:block; }
     #hud {
       position:absolute; top:20px; left:20px;
@@ -336,6 +336,11 @@
     let camX = 0, cloudX = 0, praise = null; let birds = [];
     let skillTimerId = null; let skillWindowStart = 0, skillWindowDuration = 750, perfectTolerance = 40;
     let splashes = [];               // splash particles
+
+    // Keep game speed consistent in normal browsers and in-app browsers like WhatsApp.
+    // Some mobile WebViews run requestAnimationFrame at 90Hz/120Hz, which made the pebble too fast.
+    const TARGET_FRAME_MS = 1000 / 60;
+    let lastFrameTime = 0;
     let lastStoneX = stone.x; // reserved (unused for now)
     let touchingWater = false;       // edge-trigger water contact
     let prevOverWater = !isLand(stone.x); // track last-frame water/land above X
@@ -738,8 +743,16 @@
     }
 
     // ===== Main loop =====
-    function animate(){
+    function animate(timestamp=0){
       requestAnimationFrame(animate);
+
+      if (!lastFrameTime) lastFrameTime = timestamp;
+      const elapsed = timestamp - lastFrameTime;
+
+      // Skip extra frames on 90Hz/120Hz mobile/in-app browsers so physics stays at 60fps.
+      if (elapsed < TARGET_FRAME_MS - 0.5) return;
+      lastFrameTime = timestamp - (elapsed % TARGET_FRAME_MS);
+
       updateCamera();
       ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -821,15 +834,28 @@
     animate();
 
     // ===== Charging & Launch =====
-    function chargePower(){
-      if (!charging || power >= 1) return;
-      power += 0.01;
+    let lastChargeTime = 0;
+    function chargePower(timestamp=0){
+      if (!charging || power >= 1) {
+        lastChargeTime = 0;
+        return;
+      }
+
+      if (!lastChargeTime) lastChargeTime = timestamp;
+      const dt = Math.min((timestamp - lastChargeTime) / TARGET_FRAME_MS, 2);
+      lastChargeTime = timestamp;
+
+      // Same feel as the old 60fps version, but consistent on 90Hz/120Hz phones/WebViews.
+      power += 0.01 * dt;
+      if (power > 1) power = 1;
+
       powerBar.style.width = (power*100) + '%';
       requestAnimationFrame(chargePower);
     }
     function releasePower(){
       if (!charging || pressCount >= maxPresses || stone.landed) return;
       charging = false;
+      lastChargeTime = 0;
       powerBar.style.width = '0%';
       pressCount++;
 
@@ -854,7 +880,7 @@
 
     powerBtn.addEventListener('mousedown', () => {
       if (pressCount < maxPresses && !stone.landed) {
-        charging = true; power = 0; chargePower();
+        charging = true; power = 0; lastChargeTime = 0; chargePower();
       }
     });
     powerBtn.addEventListener('mouseup', releasePower);
