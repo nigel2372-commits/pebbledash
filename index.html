@@ -437,6 +437,19 @@
       if (!ol) return;
 
       board = (board || []).sort((a,b)=>b.score-a.score).slice(0,5);
+
+      // Keep the HUD high score synced to the 1st position in the leaderboard.
+      // When online, this is the global database top score.
+      // If the database is unavailable, it falls back to local scores.
+      const topScore = board.length > 0 ? Math.round(Number(board[0].score) || 0) : 0;
+      if (topScore > 0) {
+        highScore = topScore;
+        highScoreDisplay.textContent = 'High Score: ' + topScore + 'm';
+      } else {
+        highScore = parseInt(localStorage.getItem('pebbleHighScore')) || 0;
+        highScoreDisplay.textContent = 'High Score: ' + highScore + 'm';
+      }
+
       ol.innerHTML = '';
 
       const cups = ['🥇','🥈','🥉'];
@@ -744,12 +757,17 @@
         bestLandX = stone.x;
         localStorage.setItem('pebbleBestLandX', String(bestLandX));
       }
-      if (d > highScore) {
-        highScore = d;
+      // Keep a local backup high score, but the HUD high score is refreshed from the
+      // global leaderboard after score submission.
+      const localHigh = parseInt(localStorage.getItem('pebbleHighScore')) || 0;
+      if (d > localHigh) {
         localStorage.setItem('pebbleHighScore', d);
-        highScoreDisplay.textContent = 'High Score: ' + d + 'm';
       }
-      (async ()=>{ await maybeRecordScore(d); setTimeout(()=>location.reload(), 300); })();
+
+      (async ()=>{
+        await maybeRecordScore(d);
+        setTimeout(()=>location.reload(), 300);
+      })();
     }
 
     function drawBestLandFlag(){
